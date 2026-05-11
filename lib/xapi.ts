@@ -25,10 +25,26 @@ export interface XTweet {
   created_at: string;
 }
 
+interface XUserResponse {
+  data?: XProfile;
+  errors?: Array<{ detail: string }>;
+}
+
+interface XTweetsResponse {
+  data?: XTweet[];
+  errors?: Array<{ detail: string }>;
+}
+
+function getBearerToken(): string {
+  const token = process.env.X_API_BEARER_TOKEN;
+  if (!token) throw new Error('X_API_BEARER_TOKEN env var is not set');
+  return token;
+}
+
 async function xFetch(path: string) {
   const res = await fetch(`${BASE}${path}`, {
     headers: {
-      Authorization: `Bearer ${process.env.X_API_BEARER_TOKEN}`,
+      Authorization: `Bearer ${getBearerToken()}`,
     },
     next: { revalidate: 0 },
   });
@@ -41,15 +57,17 @@ async function xFetch(path: string) {
 
 export async function getUserByUsername(username: string): Promise<XProfile> {
   const data = await xFetch(
-    `/users/by/username/${username}?user.fields=profile_image_url,public_metrics`
-  );
+    `/users/by/username/${encodeURIComponent(username)}?user.fields=profile_image_url,public_metrics`
+  ) as XUserResponse;
   if (data.errors) throw new Error(data.errors[0].detail);
-  return data.data;
+  return data.data!;
 }
 
 export async function getRecentTweets(userId: string, max = 100): Promise<XTweet[]> {
+  const clampedMax = Math.min(100, Math.max(5, max));
   const data = await xFetch(
-    `/users/${userId}/tweets?max_results=${max}&tweet.fields=public_metrics,created_at&exclude=retweets,replies`
-  );
+    `/users/${userId}/tweets?max_results=${clampedMax}&tweet.fields=public_metrics,created_at&exclude=retweets,replies`
+  ) as XTweetsResponse;
+  if (data.errors) throw new Error(data.errors[0].detail);
   return data.data ?? [];
 }
